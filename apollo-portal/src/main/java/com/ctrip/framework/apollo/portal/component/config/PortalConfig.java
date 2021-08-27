@@ -28,12 +28,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import java.lang.reflect.Type;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.lang.reflect.Type;
-import java.util.*;
 
 @Component
 public class PortalConfig extends RefreshableConfig {
@@ -47,7 +50,8 @@ public class PortalConfig extends RefreshableConfig {
   /**
    * meta servers config in "PortalDB.ServerConfig"
    */
-  private static final Type META_SERVERS = new TypeToken<Map<String, String>>(){}.getType();
+  private static final Type META_SERVERS = new TypeToken<Map<String, String>>() {
+  }.getType();
 
   private final PortalDBPropertySource portalDBPropertySource;
 
@@ -64,7 +68,8 @@ public class PortalConfig extends RefreshableConfig {
    * Level: important
    **/
   public List<Env> portalSupportedEnvs() {
-    String[] configurations = getArrayProperty("apollo.portal.envs", new String[]{"FAT", "UAT", "PRO"});
+    String[] configurations = getArrayProperty("apollo.portal.envs",
+        new String[]{"FAT", "UAT", "PRO"});
     List<Env> envs = Lists.newLinkedList();
 
     for (String env : configurations) {
@@ -80,7 +85,7 @@ public class PortalConfig extends RefreshableConfig {
   public Map<String, String> getMetaServers() {
     final String key = "apollo.portal.meta.servers";
     String jsonContent = getValue(key);
-    if(null == jsonContent) {
+    if (null == jsonContent) {
       return Collections.emptyMap();
     }
 
@@ -104,9 +109,7 @@ public class PortalConfig extends RefreshableConfig {
     return splitter.splitToList(superAdminConfig);
   }
 
-  public Set<Env> emailSupportedEnvs() {
-    String[] configurations = getArrayProperty("email.supported.envs", null);
-
+  private Set<Env> supportedEnvs(String[] configurations) {
     Set<Env> result = Sets.newHashSet();
     if (configurations == null || configurations.length == 0) {
       return result;
@@ -117,25 +120,40 @@ public class PortalConfig extends RefreshableConfig {
     }
 
     return result;
+  }
+
+  public Set<Env> emailSupportedEnvs() {
+    String[] configurations = getArrayProperty("email.supported.envs", null);
+    return supportedEnvs(configurations);
   }
 
   public Set<Env> webHookSupportedEnvs() {
     String[] configurations = getArrayProperty("webhook.supported.envs", null);
+    return supportedEnvs(configurations);
+  }
 
-    Set<Env> result = Sets.newHashSet();
-    if (configurations == null || configurations.length == 0) {
-      return result;
-    }
 
-    for (String env : configurations) {
-      result.add(Env.valueOf(env));
-    }
+  public Set<Env> dingTalkSupportedEnvs() {
+    String[] configurations = getArrayProperty("dingTalk.supported.envs", null);
+    return supportedEnvs(configurations);
+  }
 
-    return result;
+  public boolean isDingTalkEnabled() {
+    return getBooleanProperty("dingTalk.enabled", false);
+  }
+
+  public Set<Env> qyWeixinSupportedEnvs() {
+    String[] configurations = getArrayProperty("qyWeixin.supported.envs", null);
+    return supportedEnvs(configurations);
+  }
+
+  public boolean isQyWeixinEnabled() {
+    return getBooleanProperty("qyWeixin.enabled", false);
   }
 
   public boolean isConfigViewMemberOnly(String env) {
-    String[] configViewMemberOnlyEnvs = getArrayProperty("configView.memberOnly.envs", new String[0]);
+    String[] configViewMemberOnlyEnvs = getArrayProperty("configView.memberOnly.envs",
+        new String[0]);
 
     for (String memberOnlyEnv : configViewMemberOnlyEnvs) {
       if (memberOnlyEnv.equalsIgnoreCase(env)) {
@@ -160,7 +178,8 @@ public class PortalConfig extends RefreshableConfig {
   public List<Organization> organizations() {
 
     String organizations = getValue("organizations");
-    return organizations == null ? Collections.emptyList() : GSON.fromJson(organizations, ORGANIZATION);
+    return organizations == null ? Collections.emptyList()
+        : GSON.fromJson(organizations, ORGANIZATION);
   }
 
   public String portalAddress() {
@@ -170,7 +189,8 @@ public class PortalConfig extends RefreshableConfig {
   public boolean isEmergencyPublishAllowed(Env env) {
     String targetEnv = env.name();
 
-    String[] emergencyPublishSupportedEnvs = getArrayProperty("emergencyPublish.supported.envs", new String[0]);
+    String[] emergencyPublishSupportedEnvs = getArrayProperty("emergencyPublish.supported.envs",
+        new String[0]);
 
     for (String supportedEnv : emergencyPublishSupportedEnvs) {
       if (Objects.equals(targetEnv, supportedEnv.toUpperCase().trim())) {
@@ -186,17 +206,7 @@ public class PortalConfig extends RefreshableConfig {
    **/
   public Set<Env> publishTipsSupportedEnvs() {
     String[] configurations = getArrayProperty("namespace.publish.tips.supported.envs", null);
-
-    Set<Env> result = Sets.newHashSet();
-    if (configurations == null || configurations.length == 0) {
-      return result;
-    }
-
-    for (String env : configurations) {
-      result.add(Env.valueOf(env));
-    }
-
-    return result;
+    return supportedEnvs(configurations);
   }
 
   public String consumerTokenSalt() {
