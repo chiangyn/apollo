@@ -17,9 +17,11 @@
 package com.ctrip.framework.apollo.portal.listener;
 
 import com.ctrip.framework.apollo.common.constants.ReleaseOperation;
-import com.ctrip.framework.apollo.portal.component.ConfigReleaseWebhookNotifier;
-import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.core.utils.ApolloThreadFactory;
+import com.ctrip.framework.apollo.core.utils.StringUtils;
+import com.ctrip.framework.apollo.portal.component.ConfigReleaseDingTalkNotifier;
+import com.ctrip.framework.apollo.portal.component.ConfigReleaseQyWeixinNotifier;
+import com.ctrip.framework.apollo.portal.component.ConfigReleaseWebhookNotifier;
 import com.ctrip.framework.apollo.portal.component.config.PortalConfig;
 import com.ctrip.framework.apollo.portal.component.emailbuilder.GrayPublishEmailBuilder;
 import com.ctrip.framework.apollo.portal.component.emailbuilder.MergeEmailBuilder;
@@ -27,16 +29,17 @@ import com.ctrip.framework.apollo.portal.component.emailbuilder.NormalPublishEma
 import com.ctrip.framework.apollo.portal.component.emailbuilder.RollbackEmailBuilder;
 import com.ctrip.framework.apollo.portal.entity.bo.Email;
 import com.ctrip.framework.apollo.portal.entity.bo.ReleaseHistoryBO;
+import com.ctrip.framework.apollo.portal.environment.Env;
 import com.ctrip.framework.apollo.portal.service.ReleaseHistoryService;
 import com.ctrip.framework.apollo.portal.spi.EmailService;
 import com.ctrip.framework.apollo.portal.spi.MQService;
 import com.ctrip.framework.apollo.tracer.Tracer;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-
-import javax.annotation.PostConstruct;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import javax.annotation.PostConstruct;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
 
 @Component
 public class ConfigPublishListener {
@@ -50,6 +53,8 @@ public class ConfigPublishListener {
   private final PortalConfig portalConfig;
   private final MQService mqService;
   private final ConfigReleaseWebhookNotifier configReleaseWebhookNotifier;
+  private final ConfigReleaseDingTalkNotifier configReleaseDingTalkNotifier;
+  private final ConfigReleaseQyWeixinNotifier configReleaseQyWeixinNotifier;
 
   private ExecutorService executorService;
 
@@ -62,7 +67,9 @@ public class ConfigPublishListener {
       final MergeEmailBuilder mergeEmailBuilder,
       final PortalConfig portalConfig,
       final MQService mqService,
-      final ConfigReleaseWebhookNotifier configReleaseWebhookNotifier) {
+      final ConfigReleaseWebhookNotifier configReleaseWebhookNotifier,
+      final ConfigReleaseDingTalkNotifier configReleaseDingTalkNotifier,
+      final ConfigReleaseQyWeixinNotifier configReleaseQyWeixinNotifier) {
     this.releaseHistoryService = releaseHistoryService;
     this.emailService = emailService;
     this.normalPublishEmailBuilder = normalPublishEmailBuilder;
@@ -72,11 +79,14 @@ public class ConfigPublishListener {
     this.portalConfig = portalConfig;
     this.mqService = mqService;
     this.configReleaseWebhookNotifier = configReleaseWebhookNotifier;
+    this.configReleaseDingTalkNotifier = configReleaseDingTalkNotifier;
+    this.configReleaseQyWeixinNotifier = configReleaseQyWeixinNotifier;
   }
 
   @PostConstruct
   public void init() {
-    executorService = Executors.newSingleThreadExecutor(ApolloThreadFactory.create("ConfigPublishNotify", true));
+    executorService = Executors
+        .newSingleThreadExecutor(ApolloThreadFactory.create("ConfigPublishNotify", true));
   }
 
   @EventListener
@@ -106,15 +116,19 @@ public class ConfigPublishListener {
       sendPublishEmail(releaseHistory);
 
       sendPublishMsg(releaseHistory);
+
+      sendPublishDingTalk(releaseHistory);
+
+      sendPublishQyWeixin(releaseHistory);
     }
 
     private ReleaseHistoryBO getReleaseHistory() {
       Env env = publishInfo.getEnv();
 
       int operation = publishInfo.isMergeEvent() ? ReleaseOperation.GRAY_RELEASE_MERGE_TO_MASTER :
-                      publishInfo.isRollbackEvent() ? ReleaseOperation.ROLLBACK :
-                      publishInfo.isNormalPublishEvent() ? ReleaseOperation.NORMAL_RELEASE :
-                      publishInfo.isGrayPublishEvent() ? ReleaseOperation.GRAY_RELEASE : -1;
+          publishInfo.isRollbackEvent() ? ReleaseOperation.ROLLBACK :
+              publishInfo.isNormalPublishEvent() ? ReleaseOperation.NORMAL_RELEASE :
+                  publishInfo.isGrayPublishEvent() ? ReleaseOperation.GRAY_RELEASE : -1;
 
       if (operation == -1) {
         return null;
@@ -122,17 +136,61 @@ public class ConfigPublishListener {
 
       if (publishInfo.isRollbackEvent()) {
         return releaseHistoryService
-            .findLatestByPreviousReleaseIdAndOperation(env, publishInfo.getPreviousReleaseId(), operation);
+            .findLatestByPreviousReleaseIdAndOperation(env, publishInfo.getPreviousReleaseId(),
+                operation);
       }
-      return releaseHistoryService.findLatestByReleaseIdAndOperation(env, publishInfo.getReleaseId(), operation);
+      return releaseHistoryService
+          .findLatestByReleaseIdAndOperation(env, publishInfo.getReleaseId(), operation);
 
     }
 
     /**
-    * webhook send
-    *
-    * @param releaseHistory
-    */
+     * dingTalk msg send
+     *
+     * @param releaseHistory
+     */
+    private void sendPublishDingTalk(ReleaseHistoryBO releaseHistory) {
+      if (!portalConfig.isDingTalkEnabled()) {
+        return;
+      }
+      Env env = publishInfo.getEnv();
+
+      String robotUrl = portalConfig.getDingTalkRobotUrl();
+      if (!portalConfig.dingTalkSupportedEnvs().contains(env) || StringUtils.isEmpty(robotUrl)) {
+        return;
+      }
+      String[] atList = portalConfig.getDingTalkAtList();
+      int securityType = portalConfig.getDingTalkSecurity();
+      String signKey = portalConfig.getDingTalkSignKey();
+
+      configReleaseDingTalkNotifier
+          .notify(env,robotUrl, securityType, signKey, Arrays.asList(atList), releaseHistory);
+    }
+
+    /**
+     * qy weixin msg send
+     *
+     * @param releaseHistory
+     */
+    private void sendPublishQyWeixin(ReleaseHistoryBO releaseHistory) {
+      if (!portalConfig.isQyWeixinEnabled()) {
+        return;
+      }
+      Env env = publishInfo.getEnv();
+
+      String robotUrl = portalConfig.getQyWeixinRobotUrl();
+      if (!portalConfig.qyWeixinSupportedEnvs().contains(env) || StringUtils.isEmpty(robotUrl)) {
+        return;
+      }
+
+      configReleaseQyWeixinNotifier.notify(env,robotUrl, releaseHistory);
+    }
+
+    /**
+     * webhook send
+     *
+     * @param releaseHistory
+     */
     private void sendPublishWebHook(ReleaseHistoryBO releaseHistory) {
       Env env = publishInfo.getEnv();
 

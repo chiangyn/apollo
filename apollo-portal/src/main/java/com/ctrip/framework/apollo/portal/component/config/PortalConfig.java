@@ -142,6 +142,41 @@ public class PortalConfig extends RefreshableConfig {
     return getBooleanProperty("dingTalk.enabled", false);
   }
 
+  /**
+   * 1:关键词; 2:加签名; 3:IP白名单
+   *
+   * @return
+   */
+  public int getDingTalkSecurity() {
+    return getIntProperty("dingTalk.security", 1);
+  }
+
+  /**
+   * dingTalk.security = 2:加签时,配置签名key
+   *
+   * @return
+   */
+  public String getDingTalkSignKey() {
+    return getValue("dingTalk.sign.key");
+  }
+
+  /**
+   * 钉钉机器人url地址
+   *
+   * @return
+   */
+  public String getDingTalkRobotUrl() {
+    return getValue("dingTalk.robot.url");
+  }
+
+  /**
+   * 获取钉钉消息@列表
+   * @return
+   */
+  public String[] getDingTalkAtList() {
+    return getArrayProperty("dingTalk.at.list",new String[]{});
+  }
+
   public Set<Env> qyWeixinSupportedEnvs() {
     String[] configurations = getArrayProperty("qyWeixin.supported.envs", null);
     return supportedEnvs(configurations);
@@ -149,6 +184,15 @@ public class PortalConfig extends RefreshableConfig {
 
   public boolean isQyWeixinEnabled() {
     return getBooleanProperty("qyWeixin.enabled", false);
+  }
+
+  /**
+   * 企业微信机器人url地址
+   *
+   * @return
+   */
+  public String getQyWeixinRobotUrl() {
+    return getValue("qyweixin.robot.url");
   }
 
   public boolean isConfigViewMemberOnly(String env) {
